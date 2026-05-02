@@ -1,0 +1,131 @@
+module cordic_cosine (
+    input wire clk,                   // Clock input
+    input wire rstn,               // Active-low reset
+    input wire start,                 // Start signal to begin computation
+    input wire [9:0] angle,           // 10-bit input angle (0 to 1023 for 0° to 90°)
+    output reg [9:0] cos_out,         // 10-bit output cosine value (0 to 1023)
+    output reg done                   // Done signal to indicate computation is complete
+);
+
+    // Parameters
+    parameter ITERATIONS = 15;
+    parameter signed [35:0] K = 36'd13043818; // CORDIC gain in fixed-point (scaled for 18-bit fraction)
+
+    // FSM States
+    localparam IDLE = 2'b00,
+	       LOAD = 2'b11,
+               CALCULATE = 2'b01,
+               COMPLETE = 2'b10;
+
+    // Registers for CORDIC rotation
+    reg signed [35:0] x, y, z;
+    reg signed [35:0] angle_fixed;    // Fixed-point representation of input angle
+    reg [3:0] iteration_counter;
+    reg [1:0] state, next_state;
+
+    // Precomputed arctangent values in fixed-point (18-bit fraction)
+    reg [17:0] atan_table [0:ITERATIONS-1];
+
+    // atan_table Initialization
+    
+        assign atan_table[0] = 18'd32168;    
+        assign atan_table[1] = 18'd18919;    
+        assign atan_table[2] = 18'd10036;    
+        assign atan_table[3] = 18'd5096;    
+        assign atan_table[4] = 18'd2573;     
+        assign atan_table[5] = 18'd1297;     
+        assign atan_table[6] = 18'd650;     
+        assign atan_table[7] = 18'd325;      
+        assign atan_table[8] = 18'd163;      
+        assign atan_table[9] = 18'd81;      
+        assign atan_table[10] = 18'd41;     
+        assign atan_table[11] = 18'd20;      
+        assign atan_table[12] = 18'd10;      
+        assign atan_table[13] = 18'd5;      
+        assign atan_table[14] = 18'd2;   
+    
+
+    // Temp register for CORDIC calculations
+    reg signed [35:0] x_temp;
+
+    reg signed [35:0] xcalc_int, ycalc_int, zcalc_int;
+
+    assign xcalc_int = y>>>iteration_counter;
+    assign ycalc_int = x>>>iteration_counter;
+    assign zcalc_int = atan_table[iteration_counter]<<14;
+
+    // FSM and sequential logic
+    always @(posedge clk or negedge rstn) begin
+        if (!rstn) begin
+            state <= IDLE;
+            x <= 0;
+            y <= 0;
+            z <= 0;
+            x_temp <= 0;
+            angle_fixed <= 0;
+            iteration_counter <= 0;
+            cos_out <= 0;
+            done <= 0;
+        end else begin
+            state <= next_state;
+
+            case (state)
+                IDLE: begin
+                    if (start) begin
+                        // Convert angle input to fixed-point representation
+                        angle_fixed <= angle * 36'd51471;
+			//angle_fixed <= (angle <<< 6) * 36'd51471; // Scale and map angle to CORDIC fixed-point
+                        x <= K;   // Initialize x with gain
+                        x_temp <= K;
+                        y <= 0;   // Initialize y with zero
+                        z <= angle_fixed; // Initialize z with fixed-point angle
+                        iteration_counter <= 0;
+                        done <= 0;
+                    end
+                end
+
+		LOAD: begin
+
+                        z <= angle_fixed; // Initialize z with fixed-point angle
+		end
+
+
+                CALCULATE: begin
+                    if (iteration_counter < ITERATIONS) begin
+                        x_temp <= x;
+			    //x_temp = x;
+                        if (z < 0) begin
+                            x <= x + xcalc_int; //(y >>> iteration_counter); // Arithmetic shift
+                            y <= y - ycalc_int; //(x_temp >>> iteration_counter);
+                            z <= z + zcalc_int; //atan_table[iteration_counter];
+                        end else begin
+                            x <= x - xcalc_int; //(y >>> iteration_counter);
+                            y <= y + ycalc_int; //(x_temp >>> iteration_counter);
+                            z <= z - zcalc_int; //atan_table[iteration_counter];
+                        end
+                        iteration_counter <= iteration_counter + 1;
+                    end
+                end
+
+                COMPLETE: begin
+                        //cos_out <= (x >>> 18) + 10'd512; 
+			cos_out <= (x >>> 6)-10'h30A;// + 10'd512;  // Adjust fixed-point scaling and convert to 10-bit output
+                    done <= 1;
+                end
+            endcase
+        end
+    end
+
+    // FSM next state logic
+    always @(*) begin
+        next_state = state;
+        case (state)
+            IDLE: if (start) next_state = LOAD;
+            LOAD: next_state = CALCULATE;
+            CALCULATE: if (iteration_counter == ITERATIONS) next_state = COMPLETE;
+            COMPLETE: next_state = IDLE;
+        endcase
+    end
+
+endmodule
+
