@@ -1,81 +1,97 @@
-Overview
-This project implements a CORDIC (Coordinate Rotation Digital Computer)-based sine calculator in Verilog. The module computes the sine of an input angle using an iterative shift-add algorithm, making it highly efficient for FPGA/ASIC implementations where multipliers are expensive.
-The design uses a finite state machine (FSM) to control the computation flow and performs fixed-point arithmetic for precision.
+ Overview
+This project implements hardware-efficient sine and cosine generators using the CORDIC (Coordinate Rotation Digital Computer) algorithm in Verilog. The design uses iterative shift-add operations and fixed-point arithmetic, making it highly suitable for FPGA and ASIC implementations where multipliers are expensive.
+Both sine and cosine are computed using separate modules built on a common CORDIC rotation principle and controlled via a finite state machine (FSM).
 ________________________________________
- Module Description
-Module Name
-sine
-Functionality
-•	Accepts a 10-bit angle input (mapped from 0° to 90°). 
-•	Computes the sine of the given angle using the CORDIC rotation method. 
-•	Outputs a 10-bit sine value. 
-•	Signals completion via a done flag. 
+ Features
+•	Multiplier-free architecture (shift-add only) 
+•	Fixed-point arithmetic for high precision 
+•	FSM-controlled deterministic computation 
+•	Parameterized iteration count (default: 15) 
+•	Synthesizable and FPGA-friendly design 
+•	Separate modules for sine and cosine 
 ________________________________________
- Interface
+ Modules Included
+1. sine
+•	Computes sine of a given angle using CORDIC 
+•	Output derived from the y-component of rotated vector 
+2. cordic_cosine
+•	Computes cosine of a given angle using CORDIC 
+•	Output derived from the x-component of rotated vector 
+________________________________________
+ Common Interface
 Signal Name	Width	Direction	Description
 clk	1	Input	System clock
 rstn	1	Input	Active-low reset
 start	1	Input	Starts computation
-angle	10	Input	Input angle (scaled representation)
-sine_out	10	Output	Computed sine value
+angle	10	Input	Input angle (scaled representation of 0°–90°)
 done	1	Output	Indicates computation completion
 ________________________________________
- Design Details
-1. Algorithm
-•	Uses CORDIC rotation mode 
-•	Iteratively rotates a vector toward the target angle 
-•	Uses only: 
-o	Add/Subtract operations 
-o	Bit shifts 
-o	Lookup table (atan values) 
+ Module-Specific Outputs
+Module	Output	Description
+sine	sine_out [9:0]	Computed sine value
+cordic_cosine	cos_out [9:0]	Computed cosine value
 ________________________________________
-2. Fixed-Point Representation
-•	Internal computations use 32-bit signed fixed-point 
-•	Angle is scaled using a constant factor (ascale) 
-•	Gain compensation is handled using constant K 
+ Algorithm Overview
+The design uses CORDIC in rotation mode, which computes trigonometric functions using only:
+•	Add/Subtract operations 
+•	Bit shifting 
+•	Lookup table (arctangent values) 
+At each iteration:
+•	A vector is rotated toward the target angle 
+•	The residual angle (z) is reduced toward zero 
+•	Final vector components give sine and cosine 
 ________________________________________
-3. FSM Architecture
-The module operates using a 4-state FSM:
+ FSM Architecture
+Both modules follow a 4-state FSM:
 State	Description
 IDLE	Waits for start signal
-LOAD	Loads initial values
+LOAD	Loads initial angle and values
 CALCULATE	Performs iterative CORDIC rotations
 COMPLETE	Outputs result and asserts done
 ________________________________________
-4. Iterative Computation
-•	Total iterations: 15 
-•	At each iteration: 
-o	Shift operations approximate multiplication/division 
-o	Angle (z) is reduced toward zero 
-o	Vector (x, y) rotates accordingly 
+ Fixed-Point Representation
+Parameter	Description
+Internal width	32-bit (sine), 36-bit (cosine)
+Iterations	15
+Gain constant (K)	Compensates CORDIC scaling
+Angle scaling	Converts input angle to fixed-point
 ________________________________________
-5. Lookup Table
+ Lookup Table (atan values)
 •	Precomputed arctangent values 
-•	Stored in atan_table 
-•	Used to update the angle during each iteration 
+•	Stored in ROM-style array 
+•	Used to update angle at each iteration 
+•	Scaled appropriately for fixed-point domain 
 ________________________________________
  Output Scaling
-•	Final sine value is derived from y 
-•	Right-shift operation adjusts fixed-point precision 
-•	Offset added to fit into 10-bit output range 
+Sine Module
+•	Output derived from y 
+•	Right-shift scaling applied 
+•	Offset added for normalization 
+Cosine Module
+•	Output derived from x 
+•	Right-shift scaling applied 
+•	Offset subtraction used for alignment 
 ________________________________________
- Key Features
-•	Multiplier-free implementation (hardware efficient) 
-•	Fully synchronous design 
-•	FSM-controlled operation 
-•	Parameterized iteration count 
-•	Suitable for FPGA deployment 
-________________________________________
- Notes & Considerations
-•	Input angle is not in degrees directly, but a scaled representation 
+ Design Considerations
+•	Input angle is scaled, not direct degrees 
+•	Currently supports first quadrant (0°–90°) only 
+•	Scaling constants are tuned for output range 
 •	Accuracy depends on: 
 o	Number of iterations 
-o	Fixed-point scaling constants 
-•	Currently supports first quadrant (0° to 90°) 
+o	Fixed-point precision 
 ________________________________________
  Possible Improvements
-•	Extend to full 360° support using quadrant mapping 
-•	Pipeline the design for higher throughput 
-•	Parameterize bit-widths for flexibility 
-•	Add cosine output (already partially present in comments) 
+•	Extend to full 360° using quadrant mapping 
+•	Pipeline architecture for higher throughput 
+•	Unified sine-cosine module (shared datapath) 
+•	Parameterized bit-width for scalability 
+•	Add testbench and waveform validation 
+________________________________________
+ Suggested Verification
+•	Compare outputs with MATLAB/Python reference 
+•	Sweep full input range (0–1023) 
+•	Measure error vs floating-point implementation 
+________________________________________
+ Conclusion
+This project demonstrates an efficient RTL implementation of trigonometric functions using the CORDIC algorithm. It is well-suited for digital design applications requiring low-area and deterministic computation without relying on multipliers.
 
